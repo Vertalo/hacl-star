@@ -49,7 +49,7 @@ val verify_step_2':
   -> h':lbuffer uint8 32ul
   -> a':point
   -> r':point
-  -> tmp:lbuffer uint64 60ul ->
+  -> tmp:lbuffer uint64 40ul ->
   Stack bool
     (requires fun h ->
       live h s  /\ live h h' /\ live h a' /\ live h r' /\ live h tmp /\
@@ -59,18 +59,17 @@ val verify_step_2':
     )
     (ensures fun h0 z h1 -> modifies (loc tmp) h0 h1 /\
       (z == Spec.Ed25519.(
-        let sB = point_mul (as_seq h0 s) g in
-        let hA = point_mul (as_seq h0 h') (F51.point_eval h0 a') in
-        point_equal sB (point_add (F51.point_eval h0 r') hA)))
+        let a' = point_negate (F51.point_eval h0 a') in
+        let exp_d = point_mul_double (as_seq h0 s) g (as_seq h0 h') a' in
+        point_equal exp_d (F51.point_eval h0 r')))
     )
 let verify_step_2' s h' a' r' tmp =
-  let hA   = sub tmp  0ul  20ul in
-  let rhA  = sub tmp 20ul  20ul in
-  let sB   = sub tmp 40ul  20ul in
-  Hacl.Impl.Ed25519.Ladder.point_mul_g sB s;
-  Hacl.Impl.Ed25519.Ladder.point_mul hA h' a';
-  Hacl.Impl.Ed25519.PointAdd.point_add rhA r' hA;
-  let b = Hacl.Impl.Ed25519.PointEqual.point_equal sB rhA in
+  let a_neg = sub tmp 0ul 20ul in
+  let exp_d = sub tmp 20ul 20ul in
+
+  Hacl.Impl.Ed25519.PointNegate.point_negate a' a_neg;
+  Hacl.Impl.Ed25519.Ladder.point_mul_g_double_raw exp_d s h' a_neg;
+  let b = Hacl.Impl.Ed25519.PointEqual.point_equal exp_d r' in
   b
 
 
@@ -88,13 +87,13 @@ val verify_step_2:
     )
     (ensures fun h0 z h1 -> modifies0 h0 h1 /\
       (z == Spec.Ed25519.(
-        let sB = point_mul (as_seq h0 s) g in
-        let hA = point_mul (as_seq h0 h') (F51.point_eval h0 a') in
-        point_equal sB (point_add (F51.point_eval h0 r') hA)))
+        let a' = point_negate (F51.point_eval h0 a') in
+        let exp_d = point_mul_double (as_seq h0 s) g (as_seq h0 h') a' in
+        point_equal exp_d (F51.point_eval h0 r')))
     )
 let verify_step_2 s h' a' r' =
   push_frame();
-  let tmp = create 60ul (u64 0) in
+  let tmp = create 40ul (u64 0) in
   let b = verify_step_2' s h' a' r' tmp in
   pop_frame();
   b

@@ -4,9 +4,10 @@ open FStar.Mul
 open Lib.IntTypes
 open Lib.Sequence
 open Lib.ByteSequence
-open Lib.RawIntTypes
 
 open Spec.Curve25519
+
+module E = Lib.Exponentiation
 
 #reset-options "--max_fuel 0 --z3rlimit 100"
 
@@ -32,7 +33,8 @@ let q: n:nat{n < pow2 256} =
   assert_norm(pow2 252 + 27742317777372353535851937790883648493 < pow2 255 - 19);
   (pow2 252 + 27742317777372353535851937790883648493) // Group order
 
-let _:_:unit{Spec.Hash.Definitions.max_input_length Spec.Hash.Definitions.SHA2_512 > pow2 32} = assert_norm (Spec.Hash.Definitions.max_input_length Spec.Hash.Definitions.SHA2_512 > pow2 32)
+let _:_:unit{Spec.Hash.Definitions.max_input_length Spec.Hash.Definitions.SHA2_512 > pow2 32} =
+  assert_norm (Spec.Hash.Definitions.max_input_length Spec.Hash.Definitions.SHA2_512 > pow2 32)
 
 let g_x : elem = 15112221349535400772501151409588531511454012693041857206046113283949847762202
 let g_y : elem = 46316835694926478169428394003475163141307993866256225615783033603165251855960
@@ -81,25 +83,33 @@ let point_double (p:ext_point) : Tot ext_point =
   let z3 = f *% g in
   (x3, y3, z3, t3)
 
-let ith_bit (k:lbytes 32) (i:size_nat{i < 256}) =
-  let q = i / 8 in let r = size (i % 8) in
-  (index #uint8 #32 k q >>. r) &. u8 1
+let point_negate (p:ext_point) : ext_point =
+  let x1, y1, z1, t1 = p in
+  ((-x1) % prime, y1, z1, (-t1) % prime)
 
-let cswap2 (sw:uint8) (x:ext_point) (xp1:ext_point) =
-  if uint_to_nat sw = 1 then (xp1, x) else (x, xp1)
 
-let ladder_step (k:lbytes 32) (i:nat{i < 256}) (x, xp1) =
-  let bit = ith_bit k (255 - i) in
-  let x, xp1 = cswap2 bit x xp1 in
-  let xx = point_double x in
-  let xxp1 = point_add x xp1 in
-  cswap2 bit xx xxp1
+let one_ed : ext_point = (zero, one, one, zero)
 
-let montgomery_ladder (x:ext_point) (xp1:ext_point) (k:lbytes 32) : Tot (ext_point & ext_point) =
-  Lib.LoopCombinators.repeati 256 (ladder_step k) (x, xp1)
+assume val lemma_one: a:ext_point -> Lemma (point_add a one_ed == a)
+assume val lemma_fmul_assoc: a:ext_point -> b:ext_point -> c:ext_point -> Lemma (point_add (point_add a b) c == point_add a (point_add b c))
+assume val lemma_fmul_comm: a:ext_point -> b:ext_point -> Lemma (point_add a b == point_add b a)
+assume val lemma_fsqr: a:ext_point -> Lemma (point_add a a == point_double a)
 
-let point_mul (a:lbytes 32) (p:ext_point) =
-  fst (montgomery_ladder (zero, one, one, zero) p a)
+let mk_ed25519_group: E.exp ext_point = {
+  E.one = one_ed;
+  E.fmul = point_add;
+  E.lemma_one = lemma_one;
+  E.lemma_fmul_assoc = lemma_fmul_assoc;
+  E.lemma_fmul_comm =lemma_fmul_comm;
+  }
+
+let point_mul (a:lbytes 32) (p:ext_point) : ext_point =
+  //E.exp_mont_ladder_swap2 mk_ed25519_group p 256 (nat_from_bytes_le a)
+  E.exp_fw mk_ed25519_group p 256 (nat_from_bytes_le a) 4
+
+let point_mul_double (a1:lbytes 32) (p1:ext_point) (a2:lbytes 32) (p2:ext_point) : ext_point =
+  //point_add (point_mul a1 p1) (point_mul a2 p2)
+  E.exp_double_fw mk_ed25519_group p1 256 (nat_from_bytes_le a1) p2 (nat_from_bytes_le a2) 4
 
 let recover_x (y:nat) (sign:bool) : Tot (option elem) =
   if y >= prime then None
@@ -212,9 +222,12 @@ let verify public msg signature =
         let h = sha512_modq (64 + len)
 	  (concat #uint8 #64 #(length msg) (concat #uint8 #32 #32 rs public) msg)
 	in
-        let sB = point_mul (nat_to_bytes_le 32 s) g in
-        let hA = point_mul (nat_to_bytes_le 32 h) a' in
-        point_equal sB (point_add r' hA)
+        let sb = nat_to_bytes_le 32 s in
+        let hb = nat_to_bytes_le 32 h in
+        let a' = point_negate a' in
+
+        let exp_d = point_mul_double sb g hb a' in
+        point_equal exp_d r'
       )
     )
   )
