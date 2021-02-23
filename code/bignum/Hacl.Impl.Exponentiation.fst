@@ -312,7 +312,7 @@ val lprecomp_table_f:
     (forall (j:nat{j <= v i + 2}).
       precomp_table_inv len ctx_len k (as_seq h0 a) table_len (as_seq h1 table) j))
 
-#push-options "--z3rlimit 150"
+#push-options "--z3rlimit 300"
 let lprecomp_table_f #a_t len ctx_len k ctx a table_len i table =
   Math.Lemmas.lemma_mult_le_right (v len) (v i + 3) (v table_len);
   let t1 = sub table ((i +! 1ul) *! len) len in
@@ -842,3 +842,312 @@ let lexp_fw_ct #a_t len ctx_len k ctx a bLen bBits b acc w =
     (lexp_fw_ct_f #a_t len ctx_len k)
     (lexp_fw_ct_rem #a_t len ctx_len k)
     ctx a bLen bBits b acc w
+
+///////////////////////////////////////
+
+inline_for_extraction noextract
+let lexp_double_fw_f_st (a_t:inttype_a) (len:size_t{v len > 0}) (ctx_len:size_t) (k:lexp a_t len ctx_len) =
+    ctx:lbuffer (uint_t a_t SEC) ctx_len
+  -> a1:lbuffer (uint_t a_t SEC) len
+  -> bLen:size_t
+  -> bBits:size_t{0 < v bBits /\ (v bBits - 1) / bits a_t < v bLen}
+  -> b1:lbuffer (uint_t a_t SEC) bLen
+  -> a2:lbuffer (uint_t a_t SEC) len
+  -> b2:lbuffer (uint_t a_t SEC) bLen
+  -> l:size_t{0 < v l /\ v l < bits a_t /\ v l < 32}
+  -> table_len:size_t{1 < v table_len /\ v table_len * v len <= max_size_t /\ v table_len == pow2 (v l)}
+  -> table1:lbuffer (uint_t a_t SEC) (table_len *! len)
+  -> table2:lbuffer (uint_t a_t SEC) (table_len *! len)
+  -> i:size_t{v i < v bBits / v l}
+  -> acc:lbuffer (uint_t a_t SEC) len ->
+  Stack unit
+  (requires fun h ->
+    live h a1 /\ live h b1 /\ live h a2 /\ live h b2 /\
+    live h acc /\ live h ctx /\ live h table1 /\ live h table2 /\
+    B.loc_pairwise_disjoint [ loc a1; loc b1; loc a2; loc b2; loc table1; loc table2; loc acc; loc ctx ] /\
+    BD.bn_v h b1 < pow2 (v bBits) /\
+    BD.bn_v h b2 < pow2 (v bBits) /\
+    k.to.linv_ctx (as_seq h ctx) /\
+    k.to.linv (as_seq h a1) /\ k.to.linv (as_seq h a2) /\
+    k.to.linv (as_seq h acc) /\
+    (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a1) table_len (as_seq h table1) j) /\
+    (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a2) table_len (as_seq h table2) j))
+  (ensures  fun h0 _ h1 -> modifies (loc acc) h0 h1 /\
+    k.to.linv (as_seq h1 acc) /\
+    k.to.refl (as_seq h1 acc) ==
+    S.exp_double_fw_f #k.to.a_spec k.to.exp
+      (k.to.refl (as_seq h0 a1)) (v bBits) (BD.bn_v h0 b1)
+      (k.to.refl (as_seq h0 a2)) (BD.bn_v h0 b2) (v l) (v i) (k.to.refl (as_seq h0 acc)))
+
+
+inline_for_extraction noextract
+val lexp_double_fw_raw_f:
+    #a_t:inttype_a
+  -> len:size_t{v len > 0}
+  -> ctx_len:size_t
+  -> k:lexp a_t len ctx_len ->
+  lexp_double_fw_f_st a_t len ctx_len k
+
+let lexp_double_fw_raw_f #a_t len ctx_len k ctx a1 bLen bBits b1 a2 b2 l table_len table1 table2 i acc =
+  admit();
+  let h0 = ST.get () in
+  let bits_l1 = bn_get_bits_l bLen bBits b1 l i in
+  let bits_l132 = Lib.RawIntTypes.(size_from_UInt32 (u32_to_UInt32 (to_u32 bits_l1))) in
+  assert (v bits_l132 == v bits_l1 /\ v bits_l1 < v table_len);
+  Math.Lemmas.lemma_mult_le_right (v len) (v bits_l1 + 1) (v table_len);
+  assert (v (bits_l132 *! len) == v bits_l132 * v len);
+  let a_bits_l1 = sub table1 (bits_l132 *! len) len in
+  assert (precomp_table_inv len ctx_len k (as_seq h0 a1) table_len (as_seq h0 table1) (v bits_l1));
+  assert (k.to.refl (as_seq h0 a_bits_l1) == S.pow k.to.exp (k.to.refl (as_seq h0 a1)) (v bits_l1));
+  lexp_fw_pow_fmul len ctx_len k ctx l a_bits_l1 acc;
+
+  let bits_l2 = bn_get_bits_l bLen bBits b2 l i in
+  let bits_l232 = Lib.RawIntTypes.(size_from_UInt32 (u32_to_UInt32 (to_u32 bits_l2))) in
+  assert (v bits_l232 == v bits_l2 /\ v bits_l2 < v table_len);
+  Math.Lemmas.lemma_mult_le_right (v len) (v bits_l2 + 1) (v table_len);
+  assert (v (bits_l232 *! len) == v bits_l232 * v len);
+  let a_bits_l2 = sub table2 (bits_l232 *! len) len in
+  assert (precomp_table_inv len ctx_len k (as_seq h0 a2) table_len (as_seq h0 table2) (v bits_l2));
+  assert (k.to.refl (as_seq h0 a_bits_l2) == S.pow k.to.exp (k.to.refl (as_seq h0 a2)) (v bits_l2));
+  k.lmul ctx acc a_bits_l2 acc
+
+
+inline_for_extraction noextract
+let lexp_double_fw_rem_st (a_t:inttype_a) (len:size_t{v len > 0}) (ctx_len:size_t) (k:lexp a_t len ctx_len) =
+    ctx:lbuffer (uint_t a_t SEC) ctx_len
+  -> a1:lbuffer (uint_t a_t SEC) len
+  -> bLen:size_t
+  -> bBits:size_t{0 < v bBits /\ (v bBits - 1) / bits a_t < v bLen}
+  -> b1:lbuffer (uint_t a_t SEC) bLen
+  -> a2:lbuffer (uint_t a_t SEC) len
+  -> b2:lbuffer (uint_t a_t SEC) bLen
+  -> l:size_t{0 < v l /\ v l < bits a_t /\ v l < 32}
+  -> table_len:size_t{1 < v table_len /\ v table_len * v len <= max_size_t /\ v table_len == pow2 (v l)}
+  -> table1:lbuffer (uint_t a_t SEC) (table_len *! len)
+  -> table2:lbuffer (uint_t a_t SEC) (table_len *! len)
+  -> acc:lbuffer (uint_t a_t SEC) len ->
+  Stack unit
+  (requires fun h ->
+    live h a1 /\ live h b1 /\ live h a2 /\ live h b2 /\
+    live h acc /\ live h ctx /\ live h table1 /\ live h table2 /\
+    B.loc_pairwise_disjoint [ loc a1; loc b1; loc a2; loc b2; loc table1; loc table2; loc acc; loc ctx ] /\
+    BD.bn_v h b1 < pow2 (v bBits) /\
+    BD.bn_v h b2 < pow2 (v bBits) /\
+    k.to.linv_ctx (as_seq h ctx) /\
+    k.to.linv (as_seq h a1) /\ k.to.linv (as_seq h a2) /\
+    k.to.linv (as_seq h acc) /\
+    (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a1) table_len (as_seq h table1) j) /\
+    (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a2) table_len (as_seq h table2) j))
+  (ensures  fun h0 _ h1 -> modifies (loc acc) h0 h1 /\
+    k.to.linv (as_seq h1 acc) /\
+    k.to.refl (as_seq h1 acc) ==
+    S.exp_double_fw_rem #k.to.a_spec k.to.exp
+      (k.to.refl (as_seq h0 a1)) (v bBits) (BD.bn_v h0 b1)
+      (k.to.refl (as_seq h0 a2)) (BD.bn_v h0 b2) (v l) (k.to.refl (as_seq h0 acc)))
+
+
+inline_for_extraction noextract
+val lexp_double_fw_raw_rem:
+    #a_t:inttype_a
+  -> len:size_t{v len > 0}
+  -> ctx_len:size_t
+  -> k:lexp a_t len ctx_len ->
+  lexp_double_fw_rem_st a_t len ctx_len k
+
+let lexp_double_fw_raw_rem #a_t len ctx_len k ctx a1 bLen bBits b1 a2 b2 l table_len table1 table2 acc =
+  admit();
+  let h0 = ST.get () in
+  let c = bBits %. l in
+  assert (v c == v bBits % v l);
+  let bits_c1 = bn_get_bits_c bLen bBits b1 l in
+  let bits_c132 = Lib.RawIntTypes.(size_from_UInt32 (u32_to_UInt32 (to_u32 bits_c1))) in
+  assert (v bits_c132 == v bits_c1 /\ v bits_c1 < v table_len);
+  assert (v (bits_c132 *! len) == v bits_c132 * v len);
+  Math.Lemmas.lemma_mult_le_right (v len) (v bits_c132 + 1) (v table_len);
+  let a_bits_c1 = sub table1 (bits_c132 *! len) len in
+  assert (precomp_table_inv len ctx_len k (as_seq h0 a1) table_len (as_seq h0 table1) (v bits_c1));
+  assert (k.to.refl (as_seq h0 a_bits_c1) == S.pow k.to.exp (k.to.refl (as_seq h0 a1)) (v bits_c1));
+  lexp_fw_pow_fmul len ctx_len k ctx c a_bits_c1 acc;
+
+  let bits_c2 = bn_get_bits_c bLen bBits b2 l in
+  let bits_c232 = Lib.RawIntTypes.(size_from_UInt32 (u32_to_UInt32 (to_u32 bits_c2))) in
+  assert (v bits_c232 == v bits_c2 /\ v bits_c2 < v table_len);
+  assert (v (bits_c232 *! len) == v bits_c232 * v len);
+  Math.Lemmas.lemma_mult_le_right (v len) (v bits_c232 + 1) (v table_len);
+  let a_bits_c2 = sub table2 (bits_c232 *! len) len in
+  assert (precomp_table_inv len ctx_len k (as_seq h0 a2) table_len (as_seq h0 table2) (v bits_c2));
+  assert (k.to.refl (as_seq h0 a_bits_c2) == S.pow k.to.exp (k.to.refl (as_seq h0 a2)) (v bits_c2));
+  k.lmul ctx acc a_bits_c2 acc
+
+
+inline_for_extraction noextract
+let lexp_double_fw_loop_st (a_t:inttype_a) (len:size_t{v len > 0}) (ctx_len:size_t) (k:lexp a_t len ctx_len) =
+    ctx:lbuffer (uint_t a_t SEC) ctx_len
+  -> a1:lbuffer (uint_t a_t SEC) len
+  -> bLen:size_t
+  -> bBits:size_t{0 < v bBits /\ (v bBits - 1) / bits a_t < v bLen}
+  -> b1:lbuffer (uint_t a_t SEC) bLen
+  -> a2:lbuffer (uint_t a_t SEC) len
+  -> b2:lbuffer (uint_t a_t SEC) bLen
+  -> l:size_t{0 < v l /\ v l < bits a_t /\ v l < 32}
+  -> table_len:size_t{1 < v table_len /\ v table_len * v len <= max_size_t /\ v table_len == pow2 (v l)}
+  -> table1:lbuffer (uint_t a_t SEC) (table_len *! len)
+  -> table2:lbuffer (uint_t a_t SEC) (table_len *! len)
+  -> acc:lbuffer (uint_t a_t SEC) len ->
+  Stack unit
+  (requires fun h ->
+    live h a1 /\ live h b1 /\ live h a2 /\ live h b2 /\
+    live h acc /\ live h ctx /\ live h table1 /\ live h table2 /\
+    B.loc_pairwise_disjoint [ loc a1; loc b1; loc a2; loc b2; loc table1; loc table2; loc acc; loc ctx ] /\
+    BD.bn_v h b1 < pow2 (v bBits) /\
+    BD.bn_v h b2 < pow2 (v bBits) /\
+    k.to.linv_ctx (as_seq h ctx) /\
+    k.to.linv (as_seq h a1) /\ k.to.linv (as_seq h a2) /\
+    k.to.linv (as_seq h acc) /\
+    (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a1) table_len (as_seq h table1) j) /\
+    (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a2) table_len (as_seq h table2) j))
+  (ensures  fun h0 _ h1 -> modifies (loc acc) h0 h1 /\ k.to.linv (as_seq h1 acc) /\
+    k.to.refl (as_seq h1 acc) ==
+    Loops.repeati (v bBits / v l) (S.exp_double_fw_f k.to.exp (k.to.refl (as_seq h0 a1))
+      (v bBits) (BD.bn_v h0 b1) (k.to.refl (as_seq h0 a2)) (BD.bn_v h0 b2) (v l)) (k.to.refl (as_seq h0 acc)))
+
+
+inline_for_extraction noextract
+val lexp_double_fw_loop:
+    #a_t:inttype_a
+  -> len:size_t{v len > 0}
+  -> ctx_len:size_t
+  -> k:lexp a_t len ctx_len
+  -> lexp_double_fw_f:lexp_double_fw_f_st a_t len ctx_len k ->
+  lexp_double_fw_loop_st a_t len ctx_len k
+
+let lexp_double_fw_loop #a_t len ctx_len k lexp_double_fw_f ctx a1 bLen bBits b1 a2 b2 l table_len table1 table2 acc =
+  let h0 = ST.get () in
+
+  [@ inline_let]
+  let refl1 i : GTot k.to.a_spec = k.to.refl (as_seq h0 acc) in
+  [@inline_let]
+  let spec (h:mem) = S.exp_double_fw_f k.to.exp (k.to.refl (as_seq h0 a1))
+    (v bBits) (BD.bn_v h0 b1) (k.to.refl (as_seq h0 a2)) (BD.bn_v h0 b2) (v l) in
+
+  [@inline_let]
+  let inv h (i:nat{i <= v bBits / v l}) =
+    modifies (loc acc) h0 h /\
+    k.to.linv (as_seq h acc) /\
+    k.to.refl (as_seq h acc) == Loops.repeati i (spec h0) (refl1 0) /\
+    (forall (j:nat{j < v table_len}). precomp_table_inv len ctx_len k (as_seq h a1) table_len (as_seq h table1) j) /\
+    (forall (j:nat{j < v table_len}). precomp_table_inv len ctx_len k (as_seq h a2) table_len (as_seq h table2) j) in
+
+
+  Loops.eq_repeati0 (v bBits / v l) (spec h0) (refl1 0);
+  Lib.Loops.for 0ul (bBits /. l) inv
+  (fun i ->
+    Loops.unfold_repeati (v bBits / v l) (spec h0) (refl1 0) (v i);
+    lexp_double_fw_f ctx a1 bLen bBits b1 a2 b2 l table_len table1 table2 i acc
+  )
+
+
+inline_for_extraction noextract
+let lexp_double_fw_gen_st (a_t:inttype_a) (len:size_t{v len > 0}) (ctx_len:size_t) (k:lexp a_t len ctx_len) =
+    ctx:lbuffer (uint_t a_t SEC) ctx_len
+  -> a1:lbuffer (uint_t a_t SEC) len
+  -> bLen:size_t
+  -> bBits:size_t{0 < v bBits /\ (v bBits - 1) / bits a_t < v bLen}
+  -> b1:lbuffer (uint_t a_t SEC) bLen
+  -> a2:lbuffer (uint_t a_t SEC) len
+  -> b2:lbuffer (uint_t a_t SEC) bLen
+  -> l:size_t{0 < v l /\ v l < bits a_t /\ v l < 32}
+  -> table_len:size_t{1 < v table_len /\ v table_len * v len <= max_size_t /\ v table_len == pow2 (v l)}
+  -> table1:lbuffer (uint_t a_t SEC) (table_len *! len)
+  -> table2:lbuffer (uint_t a_t SEC) (table_len *! len)
+  -> acc:lbuffer (uint_t a_t SEC) len ->
+  Stack unit
+  (requires fun h ->
+    live h a1 /\ live h b1 /\ live h a2 /\ live h b2 /\
+    live h acc /\ live h ctx /\ live h table1 /\ live h table2 /\
+    B.loc_pairwise_disjoint [ loc a1; loc b1; loc a2; loc b2; loc table1; loc table2; loc acc; loc ctx ] /\
+    BD.bn_v h b1 < pow2 (v bBits) /\
+    BD.bn_v h b2 < pow2 (v bBits) /\
+    k.to.linv_ctx (as_seq h ctx) /\
+    k.to.linv (as_seq h a1) /\ k.to.linv (as_seq h a2) /\
+    k.to.linv (as_seq h acc) /\ k.to.refl (as_seq h acc) == k.to.exp.S.one /\
+    (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a1) table_len (as_seq h table1) j) /\
+    (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a2) table_len (as_seq h table2) j))
+  (ensures  fun h0 _ h1 -> modifies (loc acc) h0 h1 /\
+    k.to.linv (as_seq h1 acc) /\
+    k.to.refl (as_seq h1 acc) ==
+    S.exp_double_fw k.to.exp
+      (k.to.refl (as_seq h0 a1)) (v bBits) (BD.bn_v h0 b1)
+      (k.to.refl (as_seq h0 a2)) (BD.bn_v h0 b2) (v l))
+
+
+inline_for_extraction noextract
+val lexp_double_fw_gen_:
+    #a_t:inttype_a
+  -> len:size_t{v len > 0}
+  -> ctx_len:size_t
+  -> k:lexp a_t len ctx_len
+  -> lexp_double_fw_f:lexp_double_fw_f_st a_t len ctx_len k
+  -> lexp_double_fw_rem:lexp_double_fw_rem_st a_t len ctx_len k ->
+  lexp_double_fw_gen_st a_t len ctx_len k
+
+let lexp_double_fw_gen_ #a_t len ctx_len k lexp_double_fw_f lexp_double_fw_rem ctx a1 bLen bBits b1 a2 b2 l table_len table1 table2 acc =
+  lexp_double_fw_loop #a_t len ctx_len k lexp_double_fw_f ctx a1 bLen bBits b1 a2 b2 l table_len table1 table2 acc;
+
+  assert (v (bBits %. l) == v bBits % v l);
+  if bBits %. l <>. 0ul then lexp_double_fw_rem ctx a1 bLen bBits b1 a2 b2 l table_len table1 table2 acc
+
+
+inline_for_extraction noextract
+val lexp_double_fw_gen:
+    #a_t:inttype_a
+  -> len:size_t{v len > 0}
+  -> ctx_len:size_t
+  -> k:lexp a_t len ctx_len
+  -> lexp_double_fw_f:lexp_double_fw_f_st a_t len ctx_len k
+  -> lexp_double_fw_rem:lexp_double_fw_rem_st a_t len ctx_len k ->
+  lexp_double_fw_st a_t len ctx_len k
+
+#push-options "--z3rlimit 150"
+let lexp_double_fw_gen #a_t len ctx_len k lexp_double_fw_f lexp_double_fw_rem ctx a1 bLen bBits b1 a2 b2 acc l =
+  push_frame ();
+  Math.Lemmas.pow2_lt_compat 32 (v l);
+  let table_len = 1ul <<. l in
+  assert (v table_len == pow2 (v l));
+  Math.Lemmas.pow2_le_compat (v l) 1;
+  assert (1 < v table_len /\ v table_len * v len <= max_size_t);
+
+  let table1 = create (table_len *! len) (uint #a_t #SEC 0) in
+  update_sub table1 0ul len acc;
+  lprecomp_table #a_t len ctx_len k ctx a1 table_len table1;
+  let h = ST.get () in
+  assert (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a1) table_len (as_seq h table1) j);
+
+  let table2 = create (table_len *! len) (uint #a_t #SEC 0) in
+  update_sub table2 0ul len acc;
+  lprecomp_table #a_t len ctx_len k ctx a2 table_len table2;
+  let h = ST.get () in
+  assert (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a1) table_len (as_seq h table1) j);
+  assert (forall (j:nat{j < v table_len}).
+      precomp_table_inv len ctx_len k (as_seq h a2) table_len (as_seq h table2) j);
+
+  lexp_double_fw_gen_ #a_t len ctx_len k lexp_double_fw_f lexp_double_fw_rem ctx a1 bLen bBits b1 a2 b2 l table_len table1 table2 acc;
+  pop_frame ()
+#pop-options
+
+
+let lexp_double_fw_raw #a_t len ctx_len k ctx a1 bLen bBits b1 a2 b2 acc w =
+  lexp_double_fw_gen #a_t len ctx_len k
+    (lexp_double_fw_raw_f #a_t len ctx_len k)
+    (lexp_double_fw_raw_rem #a_t len ctx_len k)
+    ctx a1 bLen bBits b1 a2 b2 acc w

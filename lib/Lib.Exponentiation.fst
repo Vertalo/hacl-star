@@ -500,3 +500,155 @@ let exp_fw_lemma #t k a bBits b l =
       (==) { Math.Lemmas.euclidean_division_definition b (pow2 c) }
       pow k a b;
       }; () end
+
+
+val exp_double_fw_lemma_step:
+    #t:Type -> k:exp t
+  -> a1:t -> bBits:nat -> b1:nat{b1 < pow2 bBits}
+  -> a2:t -> b2:nat{b2 < pow2 bBits}
+  -> l:pos
+  -> i:pos{i <= bBits / l}
+  -> acc:t -> Lemma
+  (requires
+    acc == fmul (pow k a1 (b1 / pow2 (bBits - l * (i - 1)))) (pow k a2 (b2 / pow2 (bBits - l * (i - 1)))))
+  (ensures
+    exp_double_fw_f k a1 bBits b1 a2 b2 l (i - 1) acc ==
+    fmul (pow k a1 (b1 / pow2 (bBits - l * i))) (pow k a2 (b2 / pow2 (bBits - l * i))))
+
+let exp_double_fw_lemma_step #t k a1 bBits b1 a2 b2 l i acc =
+  let acc1 = exp_pow2 k acc l in
+  let r11 = b1 / pow2 (bBits - l * (i - 1)) in
+  let r12 = b1 / pow2 (bBits - l * (i - 1) - l) % pow2 l in
+  let r21 = b2 / pow2 (bBits - l * (i - 1)) in
+  let r22 = b2 / pow2 (bBits - l * (i - 1) - l) % pow2 l in
+
+  calc (==) {
+    k.fmul acc1 (pow k a1 r12);
+    (==) { exp_pow2_lemma k acc l }
+    k.fmul (pow k acc (pow2 l)) (pow k a1 r12);
+    (==) { }
+    k.fmul (pow k (k.fmul (pow k a1 r11) (pow k a2 r21)) (pow2 l)) (pow k a1 r12);
+    (==) { lemma_pow_mul_base k (pow k a1 r11) (pow k a2 r21) (pow2 l) }
+    k.fmul (k.fmul (pow k (pow k a1 r11) (pow2 l)) (pow k (pow k a2 r21) (pow2 l))) (pow k a1 r12);
+    (==) { lemma_pow_mul k a1 r11 (pow2 l) }
+    k.fmul (k.fmul (pow k a1 (r11 * pow2 l)) (pow k (pow k a2 r21) (pow2 l))) (pow k a1 r12);
+    (==) { lemma_pow_mul k a2 r21 (pow2 l) }
+    k.fmul (k.fmul (pow k a1 (r11 * pow2 l)) (pow k a2 (r21 * pow2 l))) (pow k a1 r12);
+    (==) {
+      k.lemma_fmul_assoc (pow k a1 (r11 * pow2 l)) (pow k a2 (r21 * pow2 l)) (pow k a1 r12);
+      k.lemma_fmul_comm (pow k a2 (r21 * pow2 l)) (pow k a1 r12);
+      k.lemma_fmul_assoc (pow k a1 (r11 * pow2 l)) (pow k a1 r12) (pow k a2 (r21 * pow2 l)) }
+    k.fmul (k.fmul (pow k a1 (r11 * pow2 l)) (pow k a1 r12)) (pow k a2 (r21 * pow2 l));
+    (==) { lemma_pow_add k a1 (r11 * pow2 l) r12 }
+    k.fmul (pow k a1 (r11 * pow2 l + r12)) (pow k a2 (r21 * pow2 l));
+    (==) { lemma_b_div_pow2ki bBits b1 l i }
+    k.fmul (pow k a1 (b1 / pow2 (bBits - l * i))) (pow k a2 (r21 * pow2 l));
+    };
+
+  calc (==) {
+    k.fmul (k.fmul acc1 (pow k a1 r12)) (pow k a2 r22);
+    (==) { }
+    k.fmul (k.fmul (pow k a1 (b1 / pow2 (bBits - l * i))) (pow k a2 (r21 * pow2 l))) (pow k a2 r22);
+    (==) { k.lemma_fmul_assoc (pow k a1 (b1 / pow2 (bBits - l * i))) (pow k a2 (r21 * pow2 l)) (pow k a2 r22)}
+    k.fmul (pow k a1 (b1 / pow2 (bBits - l * i))) (k.fmul (pow k a2 (r21 * pow2 l)) (pow k a2 r22));
+    (==) { lemma_pow_add k a2 (r21 * pow2 l) r22 }
+    k.fmul (pow k a1 (b1 / pow2 (bBits - l * i))) (pow k a2 (r21 * pow2 l + r22));
+    (==) { lemma_b_div_pow2ki bBits b2 l i }
+    k.fmul (pow k a1 (b1 / pow2 (bBits - l * i))) (pow k a2 (b2 / pow2 (bBits - l * i)));
+    }
+
+
+val exp_double_fw_lemma_loop:
+    #t:Type -> k:exp t
+  -> a1:t -> bBits:nat -> b1:nat{b1 < pow2 bBits}
+  -> a2:t -> b2:nat{b2 < pow2 bBits}
+  -> l:pos
+  -> i:nat{i <= bBits / l} ->
+  Lemma (let acc = Loops.repeati i (exp_double_fw_f k a1 bBits b1 a2 b2 l) one in
+    acc == fmul (pow k a1 (b1 / pow2 (bBits - l * i))) (pow k a2 (b2 / pow2 (bBits - l * i))))
+
+let rec exp_double_fw_lemma_loop #t k a1 bBits b1 a2 b2 l i =
+  let acc = Loops.repeati i (exp_double_fw_f k a1 bBits b1 a2 b2 l) one in
+  if i = 0 then begin
+    Loops.eq_repeati0 i (exp_double_fw_f k a1 bBits b1 a2 b2 l) one;
+    Math.Lemmas.small_div b1 (pow2 bBits);
+    Math.Lemmas.small_div b2 (pow2 bBits);
+    lemma_pow0 k a1;
+    lemma_pow0 k a2;
+    lemma_one k.one;
+    () end
+  else begin
+    Loops.unfold_repeati i (exp_double_fw_f k a1 bBits b1 a2 b2 l) one (i - 1);
+    let acc1 = Loops.repeati (i - 1) (exp_double_fw_f k a1 bBits b1 a2 b2 l) one in
+    exp_double_fw_lemma_loop k a1 bBits b1 a2 b2 l (i - 1);
+    exp_double_fw_lemma_step k a1 bBits b1 a2 b2 l i acc1;
+    () end
+
+
+val exp_double_fw_rem_lemma:
+    #t:Type -> k:exp t
+  -> a1:t -> bBits:nat -> b1:nat{b1 < pow2 bBits}
+  -> a2:t -> b2:nat{b2 < pow2 bBits}
+  -> l:pos
+  -> acc:t ->
+  Lemma (let c = bBits % l in
+    exp_double_fw_rem k a1 bBits b1 a2 b2 l acc ==
+    fmul (fmul (pow k acc (pow2 c)) (pow k a1 (b1 % pow2 c))) (pow k a2 (b2 % pow2 c)))
+
+let exp_double_fw_rem_lemma #t k a1 bBits b1 a2 b2 l acc =
+  let c = bBits % l in
+  let bits_c1 = b1 % pow2 c in
+  let bits_c2 = b2 % pow2 c in
+  Math.Lemmas.pow2_lt_compat l c;
+  exp_pow2_lemma k acc c
+
+
+let exp_double_fw_lemma #t k a1 bBits b1 a2 b2 l =
+  let acc = Loops.repeati (bBits / l) (exp_double_fw_f k a1 bBits b1 a2 b2 l) one in
+  exp_double_fw_lemma_loop k a1 bBits b1 a2 b2 l (bBits / l);
+  Math.Lemmas.euclidean_division_definition bBits l;
+  assert (acc == fmul (pow k a1 (b1 / pow2 (bBits % l))) (pow k a2 (b2 / pow2 (bBits % l))));
+
+  let c = bBits % l in
+  let r11 = b1 / pow2 (bBits % l) in
+  let r12 = b1 % pow2 c in
+  let r21 = b2 / pow2 (bBits % l) in
+  let r22 = b2 % pow2 c in
+
+  exp_double_fw_rem_lemma #t k a1 bBits b1 a2 b2 l acc;
+  if c = 0 then begin
+    assert_norm (pow2 0 = 1);
+    assert (acc == fmul (pow k a1 b1) (pow k a2 b2)) end
+  else begin
+    calc (==) {
+      fmul (pow k acc (pow2 c)) (pow k a1 r12);
+      (==) {  }
+      fmul (pow k (fmul (pow k a1 r11) (pow k a2 r21)) (pow2 c)) (pow k a1 r12);
+      (==) { lemma_pow_mul_base k (pow k a1 r11) (pow k a2 r21) (pow2 c) }
+      fmul (fmul (pow k (pow k a1 r11) (pow2 c)) (pow k (pow k a2 r21) (pow2 c))) (pow k a1 r12);
+      (==) { lemma_pow_mul k a1 r11 (pow2 c) }
+      fmul (fmul (pow k a1 (r11 * pow2 c)) (pow k (pow k a2 r21) (pow2 c))) (pow k a1 r12);
+      (==) { lemma_pow_mul k a2 r21 (pow2 c) }
+      fmul (fmul (pow k a1 (r11 * pow2 c)) (pow k a2 (r21 * pow2 c))) (pow k a1 r12);
+      (==) {
+	k.lemma_fmul_assoc (pow k a1 (r11 * pow2 c)) (pow k a2 (r21 * pow2 c)) (pow k a1 r12);
+	k.lemma_fmul_comm (pow k a2 (r21 * pow2 c)) (pow k a1 r12);
+	k.lemma_fmul_assoc (pow k a1 (r11 * pow2 c)) (pow k a1 r12) (pow k a2 (r21 * pow2 c)) }
+      fmul (fmul (pow k a1 (r11 * pow2 c)) (pow k a1 r12)) (pow k a2 (r21 * pow2 c));
+      (==) { lemma_pow_add k a1 (r11 * pow2 c) r12 }
+      fmul (pow k a1 (r11 * pow2 c + r12)) (pow k a2 (r21 * pow2 c));
+      (==) { Math.Lemmas.euclidean_division_definition b1 (pow2 c) }
+      fmul (pow k a1 b1) (pow k a2 (r21 * pow2 c));
+      };
+
+    calc (==) {
+      fmul (fmul (pow k acc (pow2 c)) (pow k a1 r12)) (pow k a2 r22);
+      (==) { }
+      fmul (fmul (pow k a1 b1) (pow k a2 (r21 * pow2 c))) (pow k a2 r22);
+      (==) { k.lemma_fmul_assoc (pow k a1 b1) (pow k a2 (r21 * pow2 c)) (pow k a2 r22) }
+      fmul (pow k a1 b1) (fmul (pow k a2 (r21 * pow2 c)) (pow k a2 r22));
+      (==) { lemma_pow_add k a2 (r21 * pow2 c) r22 }
+      fmul (pow k a1 b1) (pow k a2 (r21 * pow2 c + r22));
+      (==) { Math.Lemmas.euclidean_division_definition b2 (pow2 c) }
+      fmul (pow k a1 b1) (pow k a2 b2);
+      }; () end

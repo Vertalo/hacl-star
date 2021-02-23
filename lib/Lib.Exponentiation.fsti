@@ -170,3 +170,39 @@ let exp_fw (#t:Type) (k:exp t) (a:t) (bBits:nat) (b:nat{b < pow2 bBits}) (l:pos)
 
 val exp_fw_lemma: #t:Type -> k:exp t -> a:t -> bBits:nat -> b:nat{b < pow2 bBits} -> l:pos ->
   Lemma (exp_fw k a bBits b l == pow k a b)
+
+
+// double exponentiation
+let exp_double_fw_f (#t:Type) (k:exp t)
+  (a1:t) (bBits:nat) (b1:nat{b1 < pow2 bBits})
+  (a2:t) (b2:nat{b2 < pow2 bBits})
+  (l:pos) (i:nat{i < bBits / l}) (acc:t) : t =
+  let acc1 = exp_pow2 k acc l in
+  let bits_l1 = get_bits_l bBits b1 l i in
+  let bits_l2 = get_bits_l bBits b2 l i in
+  let acc2 = fmul acc1 (pow k a1 bits_l1) in
+  fmul acc2 (pow k a2 bits_l2)
+
+
+let exp_double_fw_rem (#t:Type) (k:exp t)
+  (a1:t) (bBits:nat) (b1:nat{b1 < pow2 bBits})
+  (a2:t) (b2:nat{b2 < pow2 bBits})
+  (l:pos) (acc:t) : t =
+  let c = bBits % l in
+  let acc1 = exp_pow2 k acc c in
+  let bits_c1 = get_bits_c bBits b1 l in
+  let bits_c2 = get_bits_c bBits b2 l in
+  let acc2 = fmul acc1 (pow k a1 bits_c1) in
+  fmul acc2 (pow k a2 bits_c2)
+
+
+let exp_double_fw (#t:Type) (k:exp t) (a1:t) (bBits:nat) (b1:nat{b1 < pow2 bBits}) (a2:t) (b2:nat{b2 < pow2 bBits}) (l:pos) : t =
+  let acc = Loops.repeati (bBits / l) (exp_double_fw_f k a1 bBits b1 a2 b2 l) one in
+  let res = if bBits % l = 0 then acc else exp_double_fw_rem k a1 bBits b1 a2 b2 l acc in
+  res
+
+
+val exp_double_fw_lemma: #t:Type -> k:exp t
+  -> a1:t -> bBits:nat -> b1:nat{b1 < pow2 bBits}
+  -> a2:t -> b2:nat{b2 < pow2 bBits} -> l:pos ->
+  Lemma (exp_double_fw k a1 bBits b1 a2 b2 l == fmul (pow k a1 b1) (pow k a2 b2))
