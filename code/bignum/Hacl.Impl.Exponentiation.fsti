@@ -112,7 +112,7 @@ val lexp_rl:
   (requires fun h ->
     live h a /\ live h b /\ live h acc /\ live h ctx /\
     disjoint a acc /\ disjoint b acc /\ disjoint a b /\
-    disjoint ctx a /\ disjoint ctx b /\ disjoint ctx acc /\
+    disjoint ctx a /\ disjoint ctx acc /\
     BD.bn_v h b < pow2 (v bBits) /\
     k.to.linv_ctx (as_seq h ctx) /\
     k.to.linv (as_seq h a) /\ k.to.linv (as_seq h acc) /\
@@ -139,7 +139,7 @@ val lexp_mont_ladder_swap:
   (requires fun h ->
     live h a /\ live h b /\ live h acc /\ live h ctx /\
     disjoint a acc /\ disjoint b acc /\ disjoint a b /\
-    disjoint ctx a /\ disjoint ctx b /\ disjoint ctx acc /\
+    disjoint ctx a /\ disjoint ctx acc /\
     BD.bn_v h b < pow2 (v bBits) /\
     k.to.linv_ctx (as_seq h ctx) /\
     k.to.linv (as_seq h a) /\ k.to.linv (as_seq h acc) /\
@@ -179,8 +179,8 @@ let lexp_fw_st (a_t:inttype_a) (len:size_t{v len > 0}) (ctx_len:size_t) (k:lexp 
   Stack unit
   (requires fun h ->
     live h a /\ live h b /\ live h acc /\ live h ctx /\
-    disjoint a b /\ disjoint a acc /\ disjoint a ctx /\
-    disjoint b acc /\ disjoint b ctx /\ disjoint acc ctx /\
+    disjoint a acc /\ disjoint a ctx /\
+    disjoint b acc /\ disjoint acc ctx /\
     BD.bn_v h b < pow2 (v bBits) /\
     k.to.linv_ctx (as_seq h ctx) /\
     k.to.linv (as_seq h a) /\ k.to.linv (as_seq h acc) /\
@@ -223,7 +223,9 @@ let lexp_double_fw_st (a_t:inttype_a) (len:size_t{v len > 0}) (ctx_len:size_t) (
   Stack unit
   (requires fun h ->
     live h a1 /\ live h b1 /\ live h a2 /\ live h b2 /\ live h acc /\ live h ctx /\
-    B.loc_pairwise_disjoint [ loc a1; loc b1; loc a2; loc b2; loc acc; loc ctx ] /\
+    eq_or_disjoint a1 a2 /\ disjoint a1 acc /\ disjoint a1 ctx /\
+    disjoint a2 acc /\ disjoint a2 ctx /\
+    disjoint acc b1 /\ disjoint acc b2 /\ disjoint acc ctx /\
     BD.bn_v h b1 < pow2 (v bBits) /\
     BD.bn_v h b2 < pow2 (v bBits) /\
     k.to.linv_ctx (as_seq h ctx) /\
@@ -239,6 +241,15 @@ let lexp_double_fw_st (a_t:inttype_a) (len:size_t{v len > 0}) (ctx_len:size_t) (
 
 inline_for_extraction noextract
 val lexp_double_fw_raw:
+    #a_t:inttype_a
+  -> len:size_t{v len > 0}
+  -> ctx_len:size_t
+  -> k:lexp a_t len ctx_len ->
+  lexp_double_fw_st a_t len ctx_len k
+
+
+inline_for_extraction noextract
+val lexp_double_fw_ct:
     #a_t:inttype_a
   -> len:size_t{v len > 0}
   -> ctx_len:size_t
