@@ -147,7 +147,6 @@ val point_mul:
     F51.point_inv_t h1 result /\
     F51.point_eval h1 result == Spec.Ed25519.point_mul (as_seq h0 scalar) (F51.point_eval h0 q))
 
-[@CInline]
 let point_mul result scalar q =
   let h0 = ST.get () in
   push_frame ();
